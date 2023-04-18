@@ -1,7 +1,7 @@
-import { chunk } from 'lodash'
+import { assign, chunk } from 'lodash'
+import moment from 'moment'
 
 const aliyun = require('aliyun-sdk')
-
 declare interface Options {
     access: string
     secret: string
@@ -13,6 +13,7 @@ declare interface Options {
     batch: number
     interval: number
     topic: string
+    content: any
 }
 
 declare interface LogContent {
@@ -39,11 +40,23 @@ function post2sls(content: LogContent) {
     if (typeof logbody !== 'object') {
         return
     }
+
     logbody.message = content.data[0]
+    logbody.category = content.categoryName
+    logbody.level = content.level.levelStr
+    logbody.timestamp = moment(content.startTime).valueOf()
+    assign(logbody, config.content || {})
+
+    const contents = []
+    for (let i in logbody) {
+        if (logbody[i] !== null && logbody[i] !== undefined) {
+            contents.push({ key: i, value: typeof logbody[i] === 'object' ? JSON.stringify(logbody[i]) : logbody[i].toString() })
+        }
+    }
     if (config.interval) {
         caches.push({
-            time: Date.now(),
-            contents: logbody
+            time: moment(content.startTime).unix(),
+            contents
         })
 
         if (!interval) {
@@ -60,7 +73,12 @@ function post2sls(content: LogContent) {
         }
         return
     }
-    sendbatch([logbody])
+    sendbatch([
+        {
+            time: moment(content.startTime).unix(),
+            contents
+        }
+    ])
 }
 
 function sendbatch(logs: any[]) {
@@ -71,8 +89,7 @@ function sendbatch(logs: any[]) {
             projectName: config.project,
             logStoreName: config.storage,
             logGroup: {
-                logs,
-                topic: config.topic || ''
+                logs
             }
         },
         (err: Error) => {
@@ -92,6 +109,7 @@ export function configure(opts: Options) {
         endpoint: config.endpoint,
         apiVersion: config.version
     }
+
     if (params.timeout) {
         params.httpOptions = {
             timeout: config.timeout
