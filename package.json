@@ -1,0 +1,30 @@
+{
+    "name": "@pomelo2/sls-appender",
+    "version": "0.0.1",
+    "description": "",
+    "main": "lib/index.js",
+    "scripts": {
+        "test": "jest --verbose ./lib",
+        "build": "tsc -p tsconfig.json"
+    },
+    "files": [
+        "lib"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Aslijia/log4js-sls.git"
+    },
+    "author": "",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/Aslijia/log4js-sls/issues"
+    },
+    "homepage": "https://github.com/Aslijia/log4js-sls#readme",
+    "dependencies": {
+        "aliyun-sdk": "^1.12.7",
+        "lodash": "^4.17.21"
+    },
+    "devDependencies": {
+        "@types/lodash": "^4.14.194"
+    }
+}
