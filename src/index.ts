@@ -41,11 +41,11 @@ function post2sls(content: LogContent) {
         return
     }
 
-    logbody.message = content.data[0]
-    logbody.category = content.categoryName
-    logbody.level = content.level.levelStr
-    logbody.timestamp = moment(content.startTime).valueOf()
-    assign(logbody, config.content || {})
+    logbody._message = content.data[0]
+    logbody._category = content.categoryName
+    logbody._level = content.level.levelStr
+    logbody._timestamp = content.startTime
+    config.content && assign(logbody, config.content)
 
     const contents = []
     for (let i in logbody) {
