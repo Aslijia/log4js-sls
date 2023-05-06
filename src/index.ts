@@ -124,3 +124,13 @@ export function configure(opts: Options) {
     slsclient = new aliyun.SLS(params)
     return post2sls
 }
+
+process.once('beforeExit', () => {
+    if (config && caches.length) {
+        const batches = chunk(caches, config.batch || 20)
+        caches = []
+        batches.forEach((item) => {
+            sendbatch(item)
+        })
+    }
+})
