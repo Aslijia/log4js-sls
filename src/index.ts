@@ -7,13 +7,13 @@ declare interface Options {
     secret: string
     endpoint: string
     version: string
-    timeout: number
+    timeout?: number
     project: string
     storage: string
-    batch: number
-    interval: number
-    topic: string
-    content: any
+    batch?: number
+    interval?: number
+    topic?: string
+    content?: any
 }
 
 declare interface LogContent {
@@ -84,24 +84,30 @@ function post2sls(content: LogContent) {
 function sendbatch(logs: any[]) {
     if (!config || !slsclient.putLogs) return
 
-    slsclient.putLogs(
-        {
-            projectName: config.project,
-            logStoreName: config.storage,
-            logGroup: {
-                logs
+    try {
+        slsclient.putLogs(
+            {
+                projectName: config.project,
+                logStoreName: config.storage,
+                logGroup: {
+                    logs,
+                    topic: config.topic
+                }
+            },
+            (err: Error) => {
+                if (err) {
+                    console.error('send log failed: ', err.message)
+                }
             }
-        },
-        (err: Error) => {
-            if (err) {
-                console.error('send log failed: ', err.message)
-            }
-        }
-    )
+        )
+    } catch (_) {}
 }
 
 export function configure(opts: Options) {
     config = opts
+    if (!config.access || !config.project || !config.secret || !config.endpoint || !config.storage) {
+        throw new Error('missing required params')
+    }
 
     const params: any = {
         accessKeyId: config.access,
