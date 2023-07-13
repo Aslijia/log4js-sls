@@ -36,6 +36,7 @@ function post2sls(content: LogContent) {
     if (!slsclient || !config) {
         return
     }
+
     const logbody = content.data[1]
     if (typeof logbody !== 'object') {
         return
@@ -50,7 +51,11 @@ function post2sls(content: LogContent) {
     const contents = []
     for (let i in logbody) {
         if (logbody[i] !== null && logbody[i] !== undefined) {
-            contents.push({ key: i, value: typeof logbody[i] === 'object' ? JSON.stringify(logbody[i]) : logbody[i].toString() })
+            try {
+                contents.push({ key: i, value: typeof logbody[i] === 'object' ? JSON.stringify(logbody[i]) : logbody[i].toString() })
+            } catch (_) {
+                contents.push({ key: i, value: 'circular object' })
+            }
         }
     }
     if (config.interval) {
