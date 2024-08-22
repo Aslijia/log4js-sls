@@ -27,115 +27,111 @@ declare interface LogContent {
     pid: number
 }
 
-let slsclient: any
-let config: Options | undefined
-let caches: any[] = []
-let interval: NodeJS.Timeout | undefined
+class Uploader {
+    slsclient: any
+    config: any
+    interval: NodeJS.Timeout | undefined
+    caches: any[] = []
+    upload(content: LogContent) {
+        if (!this.slsclient || !this.config) {
+            return
+        }
 
-function post2sls(content: LogContent) {
-    if (!slsclient || !config) {
-        return
-    }
+        const logbody = content.data[1]
+        if (typeof logbody !== 'object') {
+            return
+        }
 
-    const logbody = content.data[1]
-    if (typeof logbody !== 'object') {
-        return
-    }
+        logbody._message = content.data[0]
+        logbody._category = content.categoryName
+        logbody._level = content.level.levelStr
+        logbody._timestamp = content.startTime
+        this.config.content && assign(logbody, this.config.content)
 
-    logbody._message = content.data[0]
-    logbody._category = content.categoryName
-    logbody._level = content.level.levelStr
-    logbody._timestamp = content.startTime
-    config.content && assign(logbody, config.content)
-
-    const contents = []
-    for (let i in logbody) {
-        if (logbody[i] !== null && logbody[i] !== undefined) {
-            try {
-                contents.push({ key: i, value: typeof logbody[i] === 'object' ? JSON.stringify(logbody[i]) : logbody[i].toString() })
-            } catch (_) {
-                contents.push({ key: i, value: 'circular object' })
+        const contents = []
+        for (let i in logbody) {
+            if (logbody[i] !== null && logbody[i] !== undefined) {
+                try {
+                    contents.push({ key: i, value: typeof logbody[i] === 'object' ? JSON.stringify(logbody[i]) : logbody[i].toString() })
+                } catch (_) {
+                    contents.push({ key: i, value: 'circular object' })
+                }
             }
         }
-    }
-    if (config.interval) {
-        caches.push({
-            time: moment(content.startTime).unix(),
-            contents
-        })
+        if (this.config.interval) {
+            this.caches.push({
+                time: moment(content.startTime).unix(),
+                contents
+            })
 
-        if (!interval) {
-            const batch = config.batch || 20
-            interval = setInterval(() => {
-                if (caches.length) {
-                    const batches = chunk(caches, batch)
-                    caches = []
-                    batches.forEach((item) => {
-                        sendbatch(item)
-                    })
-                }
-            }, config.interval)
+            if (!this.interval) {
+                const batch = this.config.batch || 20
+                this.interval = setInterval(() => {
+                    if (this.caches.length) {
+                        const batches = chunk(this.caches, batch)
+                        this.caches = []
+                        batches.forEach((item) => {
+                            this.sendbatch(item)
+                        })
+                    }
+                }, this.config.interval)
+            }
+            return
         }
-        return
-    }
-    sendbatch([
-        {
-            time: moment(content.startTime).unix(),
-            contents
-        }
-    ])
-}
-
-function sendbatch(logs: any[]) {
-    if (!config || !slsclient.putLogs) return
-
-    try {
-        slsclient.putLogs(
+        this.sendbatch([
             {
-                projectName: config.project,
-                logStoreName: config.storage,
-                logGroup: {
-                    logs,
-                    topic: config.topic
-                }
-            },
-            (err: Error) => {
-                if (err) {
-                    console.error('send log failed: ', err.message)
-                }
+                time: moment(content.startTime).unix(),
+                contents
             }
-        )
-    } catch (_) {}
+        ])
+    }
+
+    sendbatch(logs: any[]) {
+        if (!this.config || !this.slsclient.putLogs || !logs.length) return
+
+        try {
+            this.slsclient.putLogs(
+                {
+                    projectName: this.config.project,
+                    logStoreName: this.config.storage,
+                    logGroup: {
+                        logs,
+                        topic: this.config.topic
+                    }
+                },
+                (err: Error) => {
+                    if (err) {
+                        console.error('send log failed: ', err.message)
+                    }
+                }
+            )
+        } catch (_) {}
+    }
 }
 
 export function configure(opts: Options) {
-    config = opts
-    if (!config.access || !config.project || !config.secret || !config.endpoint || !config.storage) {
+    if (!opts.access || !opts.project || !opts.secret || !opts.endpoint || !opts.storage) {
         throw new Error('missing required params')
     }
+    const uploader = new Uploader()
+    uploader.config = opts
 
     const params: any = {
-        accessKeyId: config.access,
-        secretAccessKey: config.secret,
-        endpoint: config.endpoint,
-        apiVersion: config.version
+        accessKeyId: opts.access,
+        secretAccessKey: opts.secret,
+        endpoint: opts.endpoint,
+        apiVersion: opts.version
     }
 
-    if (params.timeout) {
+    if (opts.timeout) {
         params.httpOptions = {
-            timeout: config.timeout
+            timeout: opts.timeout
         }
     }
-    slsclient = new aliyun.SLS(params)
-    return post2sls
+    uploader.slsclient = new aliyun.SLS(params)
+    process.once('beforeExit', () => {
+        if (!uploader.caches.length) return
+        uploader.sendbatch(uploader.caches)
+    })
+    return uploader.upload.bind(uploader)
 }
-
-process.once('beforeExit', () => {
-    if (config && caches.length) {
-        const batches = chunk(caches, config.batch || 20)
-        caches = []
-        batches.forEach((item) => {
-            sendbatch(item)
-        })
-    }
-})
